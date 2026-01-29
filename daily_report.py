@@ -1,12 +1,16 @@
 import requests
 import json
+import os  # 新增：用于读取 GitHub 藏起来的秘密
 
-# --- 只需要修改这里 ---
-FEISHU_WEBHOOK_URL = "这里粘贴你刚才复制的Webhook链接"
-# ----------------------
+# --- 关键修改：从 GitHub Secrets 读取链接 ---
+# 如果在本地运行，它会找环境变量；在 GitHub 跑，它会找我们设置的那个 Secret
+FEISHU_WEBHOOK_URL = os.environ.get('FEISHU_URL') 
 
 def send_to_feishu(content_data):
-    # 构建飞书美化卡片
+    if not FEISHU_WEBHOOK_URL:
+        print("❌ 错误：没找到飞书 Webhook 链接，请检查 Secrets 设置")
+        return
+
     payload = {
         "msg_type": "interactive",
         "card": {
@@ -29,8 +33,7 @@ def send_to_feishu(content_data):
                     "tag": "div",
                     "text": {"tag": "lark_md", "content": f"**💡 B 端业务启示**\n{content_data['b_side']}"}
                 },
-                {
-                    "tag": "note",
+                {"tag": "note",
                     "elements": [{"tag": "plain_text", "content": "数据源：豆瓜、雪球、GitHub、海内外主流媒体"}]
                 }
             ]
@@ -39,15 +42,15 @@ def send_to_feishu(content_data):
     
     response = requests.post(FEISHU_WEBHOOK_URL, json=payload)
     if response.status_code == 200:
-        print("发送成功！去飞书看看吧。")
+        print("✅ 发送成功！去飞书看看吧。")
     else:
-        print(f"发送失败，错误码：{response.status_code}")
+        print(f"❌ 发送失败，错误码：{response.status_code}，原因：{response.text}")
 
-# 模拟今天的内容（之后可以对接 API 自动生成）
+# 模拟数据
 mock_data = {
-    "ai": "1. Moltbot 本地 Agent 爆火，GitHub 星标破 5k。\n2. OpenAI Orion 推理能力瓶颈引发讨论。",
-    "finance": "1. **神秘资金砸盘**：沪深 300 ETF 卖出 1200 亿，筹码减持约 50%。\n2. **黄金狂飙**：Tether 囤金 140 吨，金价突破 5270 美元。",
-    "b_side": "关注本地化小参数模型在券商私域的应用，降低合规压力。"
+    "ai": "1. Moltbot 本地 Agent 爆火。\n2. OpenAI Orion 推理瓶颈引发讨论。",
+    "finance": "1. **神秘资金砸盘**：沪深 300 ETF 卖出 1200 亿。\n2. **黄金狂飙**：金价突破 5270 美元。",
+    "b_side": "关注本地化小参数模型在券商私域的应用。"
 }
 
 if __name__ == "__main__":
