@@ -29,7 +29,7 @@ def get_smart_content():
     
     # 启用 Google Search 工具进行实时搜索
     response = client.models.generate_content(
-        model='gemini-2.0-flash',
+        model='gemini-1.5-flash',
         contents=prompt,
         config=types.GenerateContentConfig(
             tools=[{'google_search': {}}]
