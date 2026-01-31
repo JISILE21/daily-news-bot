@@ -22,29 +22,30 @@ def get_smart_content():
     要求：
     1. 文风参考“豆包的投资笔记”（洞察犀利、口语化但专业）。
     2. AI部分：关注GitHub趋势、技术突破（如Agent、推理模型）。
-    3. 金融部分：复盘A股/港股/美股昨日涨幅榜前列的板块，分析逻辑（结合雪球/大V观点）。
+    3. 金融部分：复盘A股/港股/美股昨日涨幅榜前列的板块，分析逻辑（综合雪球/大V观点）。
     4. 增加‘对B端业务/券商Agent启示’版块。
-    5. 返回格式必须是纯JSON，包含四个字段: ai, finance, b_side, summary。不要包含任何Markdown标识符如 ```json 。
+    5. 返回格式必须是纯JSON，包含四个字段: ai, finance, b_side, summary。
     """
     
-    # 启用 Google Search 工具进行实时搜索
-    response = client.models.generate_content(
-        model='gemini-1.5-flash',
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            tools=[{'google_search': {}}]
-        )
-    )
-    
     try:
-        # 去掉可能的 Markdown 包装
+        # 切换到更稳定的 1.5-flash 模型
+        response = client.models.generate_content(
+            model='gemini-1.5-flash', 
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[{'google_search': {}}]
+            )
+        )
+        
+        # 清洗返回的 JSON 文本
         clean_text = response.text.replace('```json', '').replace('```', '').strip()
         return json.loads(clean_text)
-    except:
+    except Exception as e:
+        print(f"❌ 生成失败，原因: {str(e)}")
         return {
-            "summary": "内容生成失败，请检查模型输出",
-            "ai": response.text[:500],
-            "finance": "解析失败，建议检查日志",
+            "summary": "内容生成暂时受限",
+            "ai": f"API 报错: {str(e)}",
+            "finance": "建议稍后手动重试",
             "b_side": "待更新"
         }
 
