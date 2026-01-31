@@ -1,57 +1,80 @@
 import requests
 import json
-import os  # 新增：用于读取 GitHub 藏起来的秘密
+import os
+import datetime
+from google import genai
+from google.genai import types
 
-# --- 关键修改：从 GitHub Secrets 读取链接 ---
-# 如果在本地运行，它会找环境变量；在 GitHub 跑，它会找我们设置的那个 Secret
-FEISHU_WEBHOOK_URL = os.environ.get('FEISHU_URL') 
+# --- 1. 配置区 ---
+FEISHU_WEBHOOK_URL = os.environ.get('FEISHU_URL')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 
-def send_to_feishu(content_data):
+def get_smart_content():
+    """调用 Gemini API 搜索并生成当日深度早报"""
+    if not GEMINI_API_KEY:
+        return {"error": "缺少 GEMINI_API_KEY"}
+    
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    prompt = f"""
+    今天是{datetime.datetime.now().strftime('%Y-%m-%d')}。请搜罗{yesterday}全天AI圈和金融圈的新鲜事。
+    要求：
+    1. 文风参考“豆包的投资笔记”（洞察犀利、口语化但专业）。
+    2. AI部分：关注GitHub趋势、技术突破（如Agent、推理模型）。
+    3. 金融部分：复盘A股/港股/美股昨日涨幅榜前列的板块，分析逻辑（结合雪球/大V观点）。
+    4. 增加‘对B端业务/券商Agent启示’版块。
+    5. 返回格式必须是纯JSON，包含四个字段: ai, finance, b_side, summary。不要包含任何Markdown标识符如 ```json 。
+    """
+    
+    # 启用 Google Search 工具进行实时搜索
+    response = client.models.generate_content(
+        model='gemini-2.0-flash',
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            tools=[{'google_search': {}}]
+        )
+    )
+    
+    try:
+        # 去掉可能的 Markdown 包装
+        clean_text = response.text.replace('```json', '').replace('```', '').strip()
+        return json.loads(clean_text)
+    except:
+        return {
+            "summary": "内容生成失败，请检查模型输出",
+            "ai": response.text[:500],
+            "finance": "解析失败，建议检查日志",
+            "b_side": "待更新"
+        }
+
+def send_to_feishu(data):
+    """发送美化后的飞书卡片"""
     if not FEISHU_WEBHOOK_URL:
-        print("❌ 错误：没找到飞书 Webhook 链接，请检查 Secrets 设置")
+        print("❌ 缺少飞书链接")
         return
 
     payload = {
         "msg_type": "interactive",
         "card": {
             "header": {
-                "title": {"tag": "plain_text", "content": "📅 豆包的投资笔记 · 深度早报"},
+                "title": {"tag": "plain_text", "content": f"📅 豆包的投资笔记 | {datetime.datetime.now().strftime('%m-%d')}"},
                 "template": "blue"
             },
             "elements": [
-                {
-                    "tag": "div",
-                    "text": {"tag": "lark_md", "content": f"**🤖 AI 圈动态**\n{content_data['ai']}"}
-                },
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**💡 今日摘要**\n{data.get('summary', '暂无内容')}"}},
                 {"tag": "hr"},
-                {
-                    "tag": "div",
-                    "text": {"tag": "lark_md", "content": f"**💰 金融全市场分析**\n{content_data['finance']}"}
-                },
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🤖 AI 圈硬核动态**\n{data.get('ai', '暂无内容')}"}},
                 {"tag": "hr"},
-                {
-                    "tag": "div",
-                    "text": {"tag": "lark_md", "content": f"**💡 B 端业务启示**\n{content_data['b_side']}"}
-                },
-                {"tag": "note",
-                    "elements": [{"tag": "plain_text", "content": "数据源：豆瓜、雪球、GitHub、海内外主流媒体"}]
-                }
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**💰 金融全市场复盘**\n{data.get('finance', '暂无内容')}"}},
+                {"tag": "hr"},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏢 券商/B端启示**\n{data.get('b_side', '暂无内容')}"}},
+                {"tag": "note", "elements": [{"tag": "plain_text", "content": "由 Gemini 2.0 AI 实时搜索生成"}]}
             ]
         }
     }
-    
-    response = requests.post(FEISHU_WEBHOOK_URL, json=payload)
-    if response.status_code == 200:
-        print("✅ 发送成功！去飞书看看吧。")
-    else:
-        print(f"❌ 发送失败，错误码：{response.status_code}，原因：{response.text}")
-
-# 模拟数据
-mock_data = {
-    "ai": "1. Moltbot 本地 Agent 爆火。\n2. OpenAI Orion 推理瓶颈引发讨论。",
-    "finance": "1. **神秘资金砸盘**：沪深 300 ETF 卖出 1200 亿。\n2. **黄金狂飙**：金价突破 5270 美元。",
-    "b_side": "关注本地化小参数模型在券商私域的应用。"
-}
+    requests.post(FEISHU_WEBHOOK_URL, json=payload)
 
 if __name__ == "__main__":
-    send_to_feishu(mock_data)
+    content = get_smart_content()
+    send_to_feishu(content)
