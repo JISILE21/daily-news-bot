@@ -2,24 +2,31 @@ name: Daily Report Bot
 
 on:
   schedule:
-    # 每天北京时间早上 8:00 (UTC 0:00)
+    # 每天北京时间早上 8:00 (UTC 时间 0:00)
     - cron: '0 0 * * *'
-  workflow_dispatch: # 允许你随时手动点击运行
+  workflow_dispatch: # 允许您手动随时点击运行测试
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4 # 使用最新的 checkout 动作
+
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11' # 推荐使用较新的 Python 版本
+
       - name: Install dependencies
-        run: pip install requests
+        # 这里必须安装 google-genai 以支持 AI 搜索功能
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-genai requests
+
       - name: Run script
         env:
-          # 从 GitHub Secrets 中安全读取 Webhook 地址
+          # 将我们在 Settings 里设置的 Secrets 映射到脚本环境变量中
           FEISHU_URL: ${{ secrets.FEISHU_WEBHOOK }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python daily_report.py
